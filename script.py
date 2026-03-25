@@ -1,9 +1,14 @@
 import os
+import sys
+
+if os.name == 'nt' and hasattr(os, 'add_dll_directory'):
+    os.add_dll_directory(os.path.dirname(os.path.abspath(__file__)))
+
 import cv2
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from pyzbar.pyzbar import decode
+import zxingcpp
 import fitz
 import sys
 
@@ -43,9 +48,9 @@ class PDFBarcodeVerifier:
                 
                 images_to_try = [gray, enhanced, hist, thresh]
                 for img in images_to_try:
-                    barcodes = decode(img)
+                    barcodes = zxingcpp.read_barcodes(img)
                     if barcodes:
-                        code = barcodes[0].data.decode("utf-8").strip()
+                        code = barcodes[0].text.strip()
                         if len(code) >= 6 and code.isalnum():
                             return code
             return None

@@ -77,7 +77,14 @@ app.post('/start', (req, res) => {
         }
     });
 
+    pythonProcess.stderr.on('data', (data) => {
+        console.error(`Python stderr: ${data.toString()}`);
+    });
+
     pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+            streamToClient({ type: 'error', message: `Python script failed with code ${code}` });
+        }
         delete jobs[jobId];
     });
 
