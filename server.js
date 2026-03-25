@@ -1,6 +1,8 @@
 const express = require("express");
-const { spawn, exec } = require("child_process");
+const multer = require("multer");
+const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 app.use(require("cors")());
@@ -9,16 +11,22 @@ app.use(express.json());
 const clients = {};
 const jobs = {};
 
-// Open local Tkinter dialog directly from the Node server API
-app.get('/select-folder', (req, res) => {
-    exec('python pick_folder.py', (error, stdout, stderr) => {
-        if (error) {
-            console.error("Folder selection error:", error);
-            res.status(500).json({ error: "Failed to open folder picker" });
-            return;
-        }
-        const folder = stdout.trim();
-        res.json({ folderPath: folder });
+// Use Multer to Upload files from Vercel Frontend to Render Backend
+app.post('/upload', (req, res, next) => {
+    const jobId = Date.now().toString();
+    req.uploadDir = path.join(__dirname, "uploads", jobId);
+    fs.mkdirSync(req.uploadDir, { recursive: true });
+    
+    const storage = multer.diskStorage({
+        destination: (req_in_cb, file, cb) => cb(null, req.uploadDir),
+        filename: (req_in_cb, file, cb) => cb(null, path.basename(file.originalname))
+    });
+    
+    const upload = multer({ storage }).array("files");
+    
+    upload(req, res, (err) => {
+        if (err) return res.status(500).json({ error: "Upload failed" });
+        res.json({ jobId, totalFiles: req.files.length });
     });
 });
 
@@ -35,9 +43,9 @@ app.get('/progress/:jobId', (req, res) => {
 });
 
 app.post('/start', (req, res) => {
-    const { jobId, folderPath, pages } = req.body;
+    const { jobId, pages } = req.body;
+    const folderPath = path.join(__dirname, "uploads", jobId);
     
-    // Spawn python without buffer to get real-time lines printed
     const pythonProcess = spawn('python', ['-u', 'script.py', folderPath, pages || "36"]);
     jobs[jobId] = { process: pythonProcess };
 
@@ -79,7 +87,6 @@ app.post('/start', (req, res) => {
 app.post('/cancel', (req, res) => {
     const { jobId } = req.body;
     if (jobs[jobId]) {
-        // Sends SIGTERM causing python script to die midway
         jobs[jobId].process.kill();
         delete jobs[jobId];
         if (clients[jobId]) {
@@ -89,6 +96,19 @@ app.post('/cancel', (req, res) => {
     } else {
         res.status(404).json({ error: "Job not found" });
     }
+});
+
+app.get('/download/:jobId', (req, res) => {
+    const folderPath = path.join(__dirname, "uploads", req.params.jobId);
+    fs.readdir(folderPath, (err, files) => {
+        if (err) return res.status(404).send("Folder not found");
+        const csvFile = files.find(f => f.endsWith('.csv'));
+        if (csvFile) {
+            res.download(path.join(folderPath, csvFile));
+        } else {
+            res.status(404).send("Report not generated");
+        }
+    });
 });
 
 app.listen(5000, () => console.log("🚀 Server running on port 5000"));
