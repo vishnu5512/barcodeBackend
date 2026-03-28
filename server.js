@@ -8,6 +8,10 @@ const app = express();
 app.use(require("cors")());
 app.use(express.json());
 
+app.get("/", (req, res) => {
+    res.json({ status: "alive", message: "Barcode Backend is running!" });
+});
+
 const clients = {};
 const jobs = {};
 
