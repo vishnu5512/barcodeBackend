@@ -1,5 +1,6 @@
 opencv-python
 pandas
 numpy
-pyzbar
+zxing-cpp
 PyMuPDF
+

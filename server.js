@@ -11,6 +11,26 @@ app.use(express.json());
 const clients = {};
 const jobs = {};
 
+// Local Picker endpoint
+app.get('/local-pick', (req, res) => {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const picker = spawn(pythonCmd, ['pick_folder.py']);
+    let folderPath = "";
+
+    picker.stdout.on('data', (data) => {
+        folderPath += data.toString();
+    });
+
+    picker.on('close', (code) => {
+        const finalPath = folderPath.trim();
+        if (finalPath) {
+            res.json({ folderPath: finalPath });
+        } else {
+            res.status(400).json({ error: "No folder selected" });
+        }
+    });
+});
+
 // Use Multer to Upload files from Vercel Frontend to Render Backend
 app.post('/upload', (req, res, next) => {
     const jobId = Date.now().toString();
@@ -43,10 +63,11 @@ app.get('/progress/:jobId', (req, res) => {
 });
 
 app.post('/start', (req, res) => {
-    const { jobId, pages } = req.body;
-    const folderPath = path.join(__dirname, "uploads", jobId);
+    const { jobId, pages, localPath } = req.body;
+    const folderPath = localPath || path.join(__dirname, "uploads", jobId);
     
-    const pythonProcess = spawn('python', ['-u', 'script.py', folderPath, pages || "36"]);
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const pythonProcess = spawn(pythonCmd, ['-u', 'script.py', folderPath, pages || "36"]);
     jobs[jobId] = { process: pythonProcess };
 
     const streamToClient = (data) => {
@@ -76,7 +97,6 @@ app.post('/start', (req, res) => {
             }
         }
     });
-
     pythonProcess.stderr.on('data', (data) => {
         console.error(`Python stderr: ${data.toString()}`);
     });
@@ -85,6 +105,19 @@ app.post('/start', (req, res) => {
         if (code !== 0) {
             streamToClient({ type: 'error', message: `Python script failed with code ${code}` });
         }
+        
+        // Cleanup: Delete uploads folder if it's not a local path
+        if (!localPath && fs.existsSync(folderPath)) {
+            setTimeout(() => {
+                try {
+                    fs.rmSync(folderPath, { recursive: true, force: true });
+                    console.log(`Deleted temporary folder: ${folderPath}`);
+                } catch (err) {
+                    console.error(`Failed to delete folder ${folderPath}:`, err);
+                }
+            }, 5000); // Wait 5s to ensure file handles are closed
+        }
+
         delete jobs[jobId];
     });
 
@@ -118,4 +151,5 @@ app.get('/download/:jobId', (req, res) => {
     });
 });
 
-app.listen(5000, () => console.log("🚀 Server running on port 5000"));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
