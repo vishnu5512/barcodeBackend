@@ -11,6 +11,11 @@ app.use(express.json());
 const clients = {};
 const jobs = {};
 
+// Health check endpoint to wake up the server (e.g. Render free tier)
+app.get('/ping', (req, res) => {
+    res.json({ status: "alive" });
+});
+
 // Use Multer to Upload files from Vercel Frontend to Render Backend
 app.post('/upload', (req, res, next) => {
     const jobId = Date.now().toString();
