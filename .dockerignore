@@ -1,0 +1,10 @@
+node_modules
+uploads
+venv
+.git
+.gitignore
+.env
+stderr.txt
+stdout.txt
+libiconv.dll
+libzbar-64.dll
