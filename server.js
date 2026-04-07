@@ -12,6 +12,28 @@ app.get("/", (req, res) => {
     res.json({ status: "alive", message: "Barcode Backend is running!" });
 });
 
+app.get("/ping", (req, res) => {
+    res.json({ status: "ok" });
+});
+
+app.get("/local-pick", (req, res) => {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const picker = spawn(pythonCmd, ["pick_folder.py"]);
+    let folderPath = "";
+
+    picker.stdout.on("data", (data) => {
+        folderPath += data.toString().trim();
+    });
+
+    picker.on("close", (code) => {
+        if (folderPath) {
+            res.json({ folderPath });
+        } else {
+            res.status(400).json({ error: "No folder selected" });
+        }
+    });
+});
+
 const clients = {};
 const jobs = {};
 
@@ -51,7 +73,8 @@ app.post('/start', (req, res) => {
     const folderPath = localPath || path.join(__dirname, "uploads", jobId);
 
     const pythonCmd = process.platform === "win32" ? "python" : "python3";
-    const pythonProcess = spawn(pythonCmd, ['-u', 'script.py', folderPath, pages || "36"]);
+    const env = { ...process.env, PATH: `${process.env.PATH}${path.delimiter}${__dirname}` };
+    const pythonProcess = spawn(pythonCmd, ['-u', 'script.py', folderPath, pages || "36"], { env });
     jobs[jobId] = { process: pythonProcess };
 
     const streamToClient = (data) => {
@@ -81,8 +104,12 @@ app.post('/start', (req, res) => {
             }
         }
     });
+
     pythonProcess.stderr.on('data', (data) => {
-        console.error(`Python stderr: ${data.toString()}`);
+        const errorMsg = data.toString();
+        console.error(`Python stderr: ${errorMsg}`);
+        // Log to a file as well for debugging
+        fs.appendFileSync(path.join(__dirname, "stderr.txt"), `[${new Date().toISOString()}] ${errorMsg}\n`);
     });
 
     pythonProcess.on('close', (code) => {
