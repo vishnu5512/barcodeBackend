@@ -16,6 +16,21 @@ app.get("/ping", (req, res) => {
     res.json({ status: "ok" });
 });
 
+app.get("/test-python", (req, res) => {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const check = spawn(pythonCmd, ["-c", "import cv2; import numpy; import pandas; import fitz; import zxingcpp; print('PYTHON_OK')"]);
+    let output = "";
+    check.stdout.on("data", (data) => output += data.toString());
+    check.stderr.on("data", (data) => output += data.toString());
+    check.on("close", (code) => {
+        if (code === 0 && output.includes("PYTHON_OK")) {
+            res.json({ status: "ok", message: "Python environment is healthy!" });
+        } else {
+            res.status(500).json({ status: "error", message: "Python environment check failed", details: output });
+        }
+    });
+});
+
 app.get("/local-pick", (req, res) => {
     const pythonCmd = process.platform === "win32" ? "python" : "python3";
     const picker = spawn(pythonCmd, ["pick_folder.py"]);
@@ -163,4 +178,5 @@ app.get('/download/:jobId', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+const server = app.listen(PORT, '0.0.0.0', () => console.log('Backend server running on port ' + PORT));
+server.timeout = 600000; // 10 minute timeout for large PDF uploads
